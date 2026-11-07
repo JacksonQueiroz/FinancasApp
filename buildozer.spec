@@ -17,6 +17,12 @@ android.private_storage = True
 android.permissions = INTERNET
 p4a.branch = develop
 
+# Força o uso do Java 17 e do Gradle mais recente
+android.gradle_dependencies = 
+android.java_home = /usr/lib/jvm/java-17-openjdk-amd64
+android.gradle_version = 8.7
+android.gradle_memory = 2048
+
 [buildozer]
 log_level = 2
 warn_on_root = 1
