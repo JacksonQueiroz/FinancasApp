@@ -8,32 +8,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
-          python -m pip install --upgrade pip
-          python -m pip install buildozer cython virtualenv
-
-      - name: Accept Android Licenses
-        run: |
-          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-          # Cria o arquivo de licença do Android SDK automaticamente
-          for package in android-sdk-license android-sdk-preview-license; do
-            echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > ~/.buildozer/android/platform/android-sdk/licenses/${package}
-          done
-
       - name: Build with Buildozer
-        run: |
-          buildozer -v android debug
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          # Força o uso da versão estável do Buildozer
+          buildozer_version: stable
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: pacote-apk
-          path: bin/*.apk
+          path: ${{ steps.buildozer.outputs.filename }}
