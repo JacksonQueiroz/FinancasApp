@@ -42,16 +42,21 @@ jobs:
           pip install git+https://github.com/kivy/buildozer.git
           pip install cython virtualenv
 
-      # O Buildozer vai falhar aqui, mas ele vai criar a pasta 'dist'
       - name: Buildozer (Gera os arquivos fonte)
         continue-on-error: true
         run: |
           buildozer -v android debug
 
-      # Aqui nós entramos na pasta e rodamos o Gradle na mão para ver o erro
+      # O comando abaixo encontra a pasta do Gradle, entra nela e roda o build mostrando os erros
       - name: Run Gradle directly to see the real error
         run: |
-          cd .buildozer/android/platform/build-arm64-v8a_armeabi-v7a/dists/minhasfinancas
+          GRADLE_DIR=$(find .buildozer -type d -name "minhasfinancas" | head -n 1)
+          if [ -z "$GRADLE_DIR" ]; then
+            echo "Pasta do Gradle não encontrada. O Buildozer falhou antes de gerar os arquivos."
+            exit 1
+          fi
+          echo "Entrando na pasta: $GRADLE_DIR"
+          cd "$GRADLE_DIR"
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
