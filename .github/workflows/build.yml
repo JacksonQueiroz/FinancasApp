@@ -14,30 +14,24 @@ jobs:
         with:
           python-version: '3.10'
 
-            - name: Install system dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool libtool-bin libltdl-dev automake pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev ant
 
       - name: Install Android SDK Tools and accept licenses
         run: |
-          # Cria a estrutura de pastas exata que o Buildozer espera
           mkdir -p ~/.buildozer/android/platform/android-sdk/cmdline-tools
           cd ~/.buildozer/android/platform/android-sdk
-          
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip -d cmdline-tools
           mv cmdline-tools/cmdline-tools cmdline-tools/latest
 
-          # A MÁGICA ACONTECE AQUI: Cria o atalho na pasta que o Buildozer vasculha
           mkdir -p tools/bin
           ln -s ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager tools/bin/sdkmanager
 
-          # Aceita as licenças
           export PATH=$PATH:~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin
           yes | sdkmanager --licenses || true
-          
-          # Instala o que o Buildozer precisa
           sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
 
       - name: Install Python dependencies
