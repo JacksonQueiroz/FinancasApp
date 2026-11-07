@@ -44,12 +44,10 @@ jobs:
           pip install git+https://github.com/kivy/buildozer.git
           pip install cython virtualenv
 
+           - name: Clean Buildozer Cache
+        run: |
+          rm -rf ~/.buildozer
+
       - name: Build APK
         run: |
           buildozer -v android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: meu-app-financas
-          path: bin/*.apk
