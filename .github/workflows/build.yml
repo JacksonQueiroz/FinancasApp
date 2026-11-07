@@ -3,7 +3,7 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -23,13 +23,11 @@ jobs:
         run: |
           mkdir -p ~/.buildozer/android/platform/android-sdk
           cd ~/.buildozer/android/platform/android-sdk
-          # Baixa a versão mais recente das ferramentas de linha de comando do Android
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip cmdline-tools.zip
           mkdir -p cmdline-tools/latest
           mv cmdline-tools/bin cmdline-tools/lib cmdline-tools/latest/
           mkdir -p tools/bin
-          # Cria o atalho para o sdkmanager
           ln -s ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager tools/bin/sdkmanager
 
       - name: Accept Android Licenses
@@ -44,10 +42,16 @@ jobs:
           pip install git+https://github.com/kivy/buildozer.git
           pip install cython virtualenv
 
-           - name: Clean Buildozer Cache
+      - name: Clean Buildozer Cache
         run: |
           rm -rf ~/.buildozer
 
       - name: Build APK
         run: |
           buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: meu-app-financas
+          path: bin/*.apk
