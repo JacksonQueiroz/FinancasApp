@@ -10,6 +10,8 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.metrics import dp
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.modalview import ModalView
 from datetime import datetime, timedelta
 import sqlite3
 import os
@@ -18,8 +20,6 @@ import calendar
 Window.clearcolor = (0.1, 0.1, 0.1, 1)
 
 if platform == 'android':
-    from android.permissions import request_permissions, Permission
-    request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
     from android.storage import app_storage_path
     DB_PATH = os.path.join(app_storage_path(), "financas_android.db")
 else:
@@ -31,45 +31,14 @@ def conectar():
 def init_db():
     con = conectar()
     cur = con.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS categorias (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            tipo TEXT NOT NULL,
-            usuario TEXT NOT NULL
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS transacoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor REAL NOT NULL,
-            tipo TEXT NOT NULL,
-            categoria TEXT,
-            data TEXT NOT NULL,
-            data_vencimento TEXT,
-            pago INTEGER DEFAULT 0,
-            usuario TEXT NOT NULL
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS metas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor_alvo REAL NOT NULL,
-            valor_atual REAL DEFAULT 0,
-            usuario TEXT NOT NULL
-        )
-    """)
+    cur.execute("CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, tipo TEXT NOT NULL, usuario TEXT NOT NULL)")
+    cur.execute("CREATE TABLE IF NOT EXISTS transacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT NOT NULL, valor REAL NOT NULL, tipo TEXT NOT NULL, categoria TEXT, data TEXT NOT NULL, data_vencimento TEXT, pago INTEGER DEFAULT 0, usuario TEXT NOT NULL)")
+    cur.execute("CREATE TABLE IF NOT EXISTS metas (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT NOT NULL, valor_alvo REAL NOT NULL, valor_atual REAL DEFAULT 0, usuario TEXT NOT NULL)")
     
     for usr in ['Jackson', 'Elcione']:
         cur.execute("SELECT COUNT(*) FROM categorias WHERE usuario=?", (usr,))
         if cur.fetchone()[0] == 0:
-            padrao = [
-                ("Salário","renda"),("Freelance","renda"),
-                ("Alimentação","despesa"),("Moradia","despesa"),("Transporte","despesa"),
-                ("Lazer","despesa"),("Saúde","despesa"),("Outros","despesa")
-            ]
+            padrao = [("Salário","renda"),("Freelance","renda"),("Alimentação","despesa"),("Moradia","despesa"),("Transporte","despesa"),("Lazer","despesa"),("Saúde","despesa"),("Outros","despesa")]
             for nome, tipo in padrao:
                 cur.execute("INSERT INTO categorias (nome, tipo, usuario) VALUES (?,?,?)", (nome, tipo, usr))
     con.commit()
@@ -86,6 +55,72 @@ class CardDashboard(BoxLayout):
         self.add_widget(Label(text=titulo, font_size='16sp', color=(0.8,0.8,0.8,1), size_hint_y=0.4))
         self.add_widget(Label(text=valor, font_size='26sp', bold=True, color=cor, size_hint_y=0.6))
 
+# NOVO CALENDÁRIO NATIVO DO KIVY (Estável)
+class CalendarioPopup(ModalView):
+    def __init__(self, botao_pai, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (0.9, 0.7)
+        self.background_color = (0, 0, 0, 0.7)
+        self.botao_pai = botao_pai
+        self.ano_atual = datetime.now().year
+        self.mes_atual = datetime.now().month
+        self.layout = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
+        self.add_widget(self.layout)
+        self.desenhar_calendario()
+
+    def desenhar_calendario(self):
+        self.layout.clear_widgets()
+        
+        # Cabeçalho (Mês/Ano e Botões)
+        topo = BoxLayout(size_hint_y=None, height=dp(50))
+        btn_ant = Button(text="<", size_hint_x=0.2, on_release=self.mes_anterior)
+        lbl_mes = Label(text=f"{calendar.month_name[self.mes_atual].capitalize()} {self.ano_atual}", bold=True, font_size='20sp')
+        btn_prox = Button(text=">", size_hint_x=0.2, on_release=self.proximo_mes)
+        topo.add_widget(btn_ant); topo.add_widget(lbl_mes); topo.add_widget(btn_prox)
+        self.layout.add_widget(topo)
+
+        # Dias da Semana
+        dias_semana = ["D", "S", "T", "Q", "Q", "S", "S"]
+        grid_semana = GridLayout(cols=7, size_hint_y=None, height=dp(30))
+        for d in dias_semana:
+            grid_semana.add_widget(Label(text=d, bold=True, color=(0.7,0.7,0.7,1)))
+        self.layout.add_widget(grid_semana)
+
+        # Dias do Mês
+        grid_dias = GridLayout(cols=7)
+        cal = calendar.monthcalendar(self.ano_atual, self.mes_atual)
+        
+        for semana in cal:
+            for dia in semana:
+                if dia == 0:
+                    grid_dias.add_widget(Label(text=""))
+                else:
+                    btn = Button(text=str(dia), background_color=(0.2, 0.4, 0.7, 1))
+                    btn.bind(on_release=lambda x, d=dia: self.selecionar_dia(d))
+                    grid_dias.add_widget(btn)
+        self.layout.add_widget(grid_dias)
+
+        # Botão Fechar
+        self.layout.add_widget(Button(text="Cancelar", size_hint_y=None, height=dp(45), background_color=(0.8, 0.3, 0.3, 1), on_release=self.dismiss))
+
+    def mes_anterior(self, instance):
+        self.mes_atual -= 1
+        if self.mes_atual < 1:
+            self.mes_atual = 12
+            self.ano_atual -= 1
+        self.desenhar_calendario()
+
+    def proximo_mes(self, instance):
+        self.mes_atual += 1
+        if self.mes_atual > 12:
+            self.mes_atual = 1
+            self.ano_atual += 1
+        self.desenhar_calendario()
+
+    def selecionar_dia(self, dia):
+        self.botao_pai.text = f"{dia:02d}/{self.mes_atual:02d}/{self.ano_atual}"
+        self.dismiss()
+
 class BotaoData(Button):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -94,25 +129,7 @@ class BotaoData(Button):
         self.bind(on_release=self.abrir_calendario)
 
     def abrir_calendario(self, instance):
-        if platform == 'android':
-            from jnius import autoclass
-            from android.runnable import run_on_ui_thread
-            
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            DatePickerDialog = autoclass('android.app.DatePickerDialog')
-            Calendar = autoclass('java.util.Calendar')
-            
-            activity = PythonActivity.mActivity
-            calendar = Calendar.getInstance()
-            ano = calendar.get(Calendar.YEAR)
-            mes = calendar.get(Calendar.MONTH)
-            dia = calendar.get(Calendar.DAY_OF_MONTH)
-
-            def on_date_selected(dp_view, year, month, day_of_month):
-                self.text = f"{day_of_month:02d}/{(month+1):02d}/{year}"
-
-            dialog = DatePickerDialog(activity, on_date_selected, ano, mes, dia)
-            dialog.show()
+        CalendarioPopup(self).open()
 
 # ============ TELAS ============
 
@@ -168,11 +185,9 @@ class MainScreen(Screen):
         self.content_area.clear_widgets()
         user = App.get_running_app().usuario_atual
         
-        con = conectar()
-        cur = con.cursor()
+        con = conectar(); cur = con.cursor()
         mes_atual = datetime.now().strftime("%Y-%m")
         
-        # CORREÇÃO: Filtro do mês atual usando a data de vencimento como prioridade
         query_renda = """SELECT COALESCE(SUM(valor),0) FROM transacoes 
                          WHERE tipo='renda' AND usuario=? 
                          AND (CASE WHEN data_vencimento IS NOT NULL AND data_vencimento != '' THEN data_vencimento ELSE data END) LIKE ?"""
@@ -212,11 +227,9 @@ class MainScreen(Screen):
         self.content_area.clear_widgets()
         user = App.get_running_app().usuario_atual
         
-        con = conectar()
-        cur = con.cursor()
+        con = conectar(); cur = con.cursor()
         mes_atual = datetime.now().strftime("%Y-%m")
         
-        # CORREÇÃO: Filtro de contas do mês usando vencimento
         query = """SELECT id, descricao, valor, tipo, data, data_vencimento, pago 
                    FROM transacoes WHERE usuario=? 
                    AND (CASE WHEN data_vencimento IS NOT NULL AND data_vencimento != '' THEN data_vencimento ELSE data END) LIKE ? 
@@ -235,8 +248,7 @@ class MainScreen(Screen):
         for tid, desc, valor, tipo, data, venc, pago in rows:
             linha = BoxLayout(size_hint_y=None, height=dp(70), spacing=dp(10))
             cor = (0.2, 0.8, 0.4, 1) if tipo == 'renda' else (0.9, 0.3, 0.3, 1)
-            if pago:
-                cor = (0.5, 0.5, 0.5, 1)
+            if pago: cor = (0.5, 0.5, 0.5, 1)
 
             info = BoxLayout(orientation='vertical')
             info.add_widget(Label(text=desc, halign="left", valign="middle", color=cor, bold=True))
@@ -263,8 +275,7 @@ class MainScreen(Screen):
     def marcar_pago(self, tid):
         con = conectar()
         con.execute("UPDATE transacoes SET pago=1 WHERE id=?", (tid,))
-        con.commit()
-        con.close()
+        con.commit(); con.close()
         self.show_transacoes()
 
     def show_metas(self, instance=None):
@@ -382,8 +393,7 @@ class MainScreen(Screen):
             meses = int(ent_meses.text) if ent_meses.text else 1
             venc_br = btn_venc.text
 
-            if not desc or not v_txt:
-                return
+            if not desc or not v_txt: return
 
             try:
                 valor = float(v_txt.replace(",", "."))
@@ -410,11 +420,7 @@ class MainScreen(Screen):
                         venc_parcela = venc_ini.replace(year=ano_parcela, month=mes_parcela, day=min(venc_ini.day, ultimo_dia_venc))
                         venc_str = venc_parcela.strftime("%Y-%m-%d")
 
-                    # Se for Fixa, avança os meses
-                    if meses > 1:
-                        desc_final = f"{desc} ({i+1}/{meses})"
-                    else:
-                        desc_final = desc
+                    desc_final = f"{desc} ({i+1}/{meses})" if meses > 1 else desc
 
                     cur.execute("""INSERT INTO transacoes (descricao, valor, tipo, categoria, data, data_vencimento, usuario) 
                                    VALUES (?,?,?,?,?,?,?)""", (desc_final, valor, tipo, cat, data_str, venc_str, user))
