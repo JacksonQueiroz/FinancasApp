@@ -11,18 +11,21 @@ from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.metrics import dp
 from datetime import datetime, timedelta
+from kivy.uix.gridlayout import GridLayout
 import sqlite3
 import os
 import calendar
 
-# Configura a cor de fundo
-Window.clearcolor = (0.1, 0.1, 0.1, 1)
-
+# Se estiver no Android, importa o calendário nativo
 if platform == 'android':
+    from android.permissions import request_permissions, Permission
+    request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
     from android.storage import app_storage_path
     DB_PATH = os.path.join(app_storage_path(), "financas_android.db")
 else:
     DB_PATH = "financas_android.db"
+
+Window.clearcolor = (0.1, 0.1, 0.1, 1)
 
 def conectar():
     return sqlite3.connect(DB_PATH)
@@ -77,13 +80,52 @@ def init_db():
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+# ============ COMPONENTES CUSTOMIZADOS ============
+
+class CardDashboard(BoxLayout):
+    def __init__(self, titulo, valor, cor, **kwargs):
+        super().__init__(orientation='vertical', size_hint_y=None, height=dp(90), padding=dp(15), spacing=dp(5), **kwargs)
+        self.add_widget(Label(text=titulo, font_size='16sp', color=(0.8,0.8,0.8,1), size_hint_y=0.4))
+        self.add_widget(Label(text=valor, font_size='26sp', bold=True, color=cor, size_hint_y=0.6))
+
+class BotaoData(Button):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.text = datetime.now().strftime("%d/%m/%Y")
+        self.background_color = (0.2, 0.4, 0.7, 1)
+        self.bind(on_release=self.abrir_calendario)
+
+    def abrir_calendario(self, instance):
+        if platform == 'android':
+            # Abre o calendário nativo do Android
+            from android import activity
+            from jnius import autoclass
+            from android.runnable import run_on_ui_thread
+            
+            # Implementação simplificada usando o DatePickerDialog do Android
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            DatePickerDialog = autoclass('android.app.DatePickerDialog')
+            Calendar = autoclass('java.util.Calendar')
+            Context = autoclass('android.content.Context')
+            
+            activity = PythonActivity.mActivity
+            calendar = Calendar.getInstance()
+            ano = calendar.get(Calendar.YEAR)
+            mes = calendar.get(Calendar.MONTH)
+            dia = calendar.get(Calendar.DAY_OF_MONTH)
+
+            def on_date_selected(dp_view, year, month, day_of_month):
+                self.text = f"{day_of_month:02d}/{(month+1):02d}/{year}"
+
+            dialog = DatePickerDialog(activity, on_date_selected, ano, mes, dia)
+            dialog.show()
+
 # ============ TELAS ============
 
 class LoginScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         layout = BoxLayout(orientation='vertical', padding=dp(30), spacing=dp(20))
-        
         layout.add_widget(Label(text="💰 Finanças Mobile", font_size='28sp', bold=True, size_hint_y=0.3))
         layout.add_widget(Label(text="Quem está acessando?", font_size='18sp', size_hint_y=0.1))
 
@@ -94,7 +136,6 @@ class LoginScreen(Screen):
         btn_elcione = Button(text="👤 Elcione", font_size='20sp', background_color=(0.8, 0.4, 0.6, 1))
         btn_elcione.bind(on_press=lambda x: self.login("Elcione"))
         layout.add_widget(btn_elcione)
-
         self.add_widget(layout)
 
     def login(self, usuario):
@@ -106,20 +147,16 @@ class MainScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.layout = BoxLayout(orientation='vertical')
-        
         self.content_area = BoxLayout(orientation='vertical', padding=dp(10))
         self.layout.add_widget(self.content_area)
 
         nav = BoxLayout(size_hint_y=0.1, spacing=dp(5))
         btn_dash = Button(text="📊 Início", background_color=(0.3, 0.3, 0.3, 1))
         btn_dash.bind(on_press=self.show_dashboard)
-        
         btn_trans = Button(text="📋 Contas", background_color=(0.3, 0.3, 0.3, 1))
         btn_trans.bind(on_press=self.show_transacoes)
-        
         btn_metas = Button(text="🎯 Metas", background_color=(0.3, 0.3, 0.3, 1))
         btn_metas.bind(on_press=self.show_metas)
-        
         btn_add = Button(text="➕", background_color=(0.1, 0.6, 0.4, 1), font_size='20sp')
         btn_add.bind(on_press=self.popup_nova_transacao)
 
@@ -127,7 +164,6 @@ class MainScreen(Screen):
         nav.add_widget(btn_trans)
         nav.add_widget(btn_add)
         nav.add_widget(btn_metas)
-        
         self.layout.add_widget(nav)
         self.add_widget(self.layout)
 
@@ -142,7 +178,7 @@ class MainScreen(Screen):
         cur = con.cursor()
         mes_atual = datetime.now().strftime("%Y-%m")
         
-        # CORREÇÃO DO BUG DO SQL AQUI:
+        # Consultas corrigidas
         cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='renda' AND usuario=? AND data LIKE ?", (user, f"{mes_atual}%"))
         renda = cur.fetchone()[0]
         cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='despesa' AND usuario=? AND data LIKE ?", (user, f"{mes_atual}%"))
@@ -157,25 +193,20 @@ class MainScreen(Screen):
 
         saldo = renda - despesa
 
-        dash = BoxLayout(orientation='vertical', spacing=dp(15))
-        dash.add_widget(Label(text=f"Olá, {user}!", font_size='20sp', bold=True, size_hint_y=0.1))
+        dash = BoxLayout(orientation='vertical', spacing=dp(10))
+        dash.add_widget(Label(text=f"Olá, {user}!", font_size='22sp', bold=True, size_hint_y=0.1))
 
         if vencendo > 0:
-            btn_aviso = Button(text=f"⚠️ {vencendo} contas vencendo em breve!", background_color=(0.8, 0.3, 0.3, 1), size_hint_y=0.15)
+            btn_aviso = Button(text=f"⚠️ {vencendo} contas vencendo em breve!", background_color=(0.8, 0.3, 0.3, 1), size_hint_y=0.1)
             btn_aviso.bind(on_press=self.show_transacoes)
             dash.add_widget(btn_aviso)
 
-        dash.add_widget(self.criar_card("💵 Renda do Mês", formatar_moeda(renda), (0.1, 0.6, 0.3, 1)))
-        dash.add_widget(self.criar_card("💸 Despesas do Mês", formatar_moeda(despesa), (0.8, 0.3, 0.3, 1)))
-        dash.add_widget(self.criar_card("📈 Saldo do Mês", formatar_moeda(saldo), (0.2, 0.4, 0.8, 1)))
+        # Cards do Dashboard
+        dash.add_widget(CardDashboard("💵 Renda do Mês", formatar_moeda(renda), (0.1, 0.6, 0.3, 1)))
+        dash.add_widget(CardDashboard("💸 Despesas do Mês", formatar_moeda(despesa), (0.8, 0.3, 0.3, 1)))
+        dash.add_widget(CardDashboard("📈 Saldo do Mês", formatar_moeda(saldo), (0.2, 0.4, 0.8, 1)))
         
         self.content_area.add_widget(dash)
-
-    def criar_card(self, titulo, valor, cor):
-        card = BoxLayout(orientation='vertical', size_hint_y=0.25, padding=dp(10))
-        card.add_widget(Label(text=titulo, font_size='16sp', color=(0.8,0.8,0.8,1)))
-        card.add_widget(Label(text=valor, font_size='28sp', bold=True, color=cor))
-        return card
 
     def show_transacoes(self, instance=None):
         self.content_area.clear_widgets()
@@ -199,7 +230,6 @@ class MainScreen(Screen):
 
         for tid, desc, valor, tipo, data, venc, pago in rows:
             linha = BoxLayout(size_hint_y=None, height=dp(70), spacing=dp(10))
-            
             cor = (0.2, 0.8, 0.4, 1) if tipo == 'renda' else (0.9, 0.3, 0.3, 1)
             if pago:
                 cor = (0.5, 0.5, 0.5, 1)
@@ -234,14 +264,12 @@ class MainScreen(Screen):
         self.show_transacoes()
 
     def show_metas(self, instance=None):
+        # (Mantido igual à versão anterior)
         self.content_area.clear_widgets()
         user = App.get_running_app().usuario_atual
-        
-        con = conectar()
-        cur = con.cursor()
+        con = conectar(); cur = con.cursor()
         cur.execute("SELECT id, descricao, valor_alvo, valor_atual FROM metas WHERE usuario=?", (user,))
-        metas = cur.fetchall()
-        con.close()
+        metas = cur.fetchall(); con.close()
 
         scroll = ScrollView()
         lista = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(10))
@@ -254,71 +282,53 @@ class MainScreen(Screen):
         for mid, desc, alvo, atual in metas:
             prog = min(atual / alvo, 1.0) if alvo > 0 else 0
             cor = (0.1, 0.6, 0.3, 1) if prog >= 1.0 else (0.2, 0.5, 0.8, 1)
-            
             card = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), padding=dp(10))
             card.add_widget(Label(text=desc, bold=True, font_size='18sp'))
             card.add_widget(Label(text=f"{formatar_moeda(atual)} de {formatar_moeda(alvo)} ({prog*100:.0f}%)"))
-            
             btn_guardar = Button(text="💰 Guardar", background_color=cor, size_hint_y=None, height=dp(35))
             btn_guardar.bind(on_press=lambda x, i=mid, a=atual: self.popup_guardar_meta(i, a))
             card.add_widget(btn_guardar)
-            
             lista.add_widget(card)
-
         scroll.add_widget(lista)
         self.content_area.add_widget(scroll)
 
     def popup_guardar_meta(self, mid, atual):
+        # (Mantido igual)
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         ent = TextInput(hint_text="Valor (R$)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
         btn = Button(text="Salvar", size_hint_y=None, height=dp(40), background_color=(0.1, 0.6, 0.3, 1))
-        content.add_widget(ent)
-        content.add_widget(btn)
+        content.add_widget(ent); content.add_widget(btn)
         popup = Popup(title="Guardar Dinheiro", content=content, size_hint=(0.8, 0.4))
 
         def salvar(instance):
             try:
                 val = float(ent.text.replace(",", "."))
-                con = conectar()
-                con.execute("UPDATE metas SET valor_atual=? WHERE id=?", (atual + val, mid))
-                con.commit()
-                con.close()
-                popup.dismiss()
-                self.show_metas()
+                con = conectar(); con.execute("UPDATE metas SET valor_atual=? WHERE id=?", (atual + val, mid))
+                con.commit(); con.close(); popup.dismiss(); self.show_metas()
             except: pass
-
-        btn.bind(on_press=salvar)
-        popup.open()
+        btn.bind(on_press=salvar); popup.open()
 
     def popup_nova_meta(self, instance):
+        # (Mantido igual)
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         ent_desc = TextInput(hint_text="Ex: Viagem", multiline=False, size_hint_y=None, height=dp(40))
         ent_val = TextInput(hint_text="Valor Alvo (R$)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
         btn = Button(text="Criar Meta", size_hint_y=None, height=dp(40), background_color=(0.1, 0.6, 0.3, 1))
-        content.add_widget(ent_desc)
-        content.add_widget(ent_val)
-        content.add_widget(btn)
+        content.add_widget(ent_desc); content.add_widget(ent_val); content.add_widget(btn)
         popup = Popup(title="Nova Meta", content=content, size_hint=(0.9, 0.5))
 
         def salvar(instance):
             try:
                 val = float(ent_val.text.replace(",", "."))
-                con = conectar()
-                con.execute("INSERT INTO metas (descricao, valor_alvo, usuario) VALUES (?,?,?)", 
+                con = conectar(); con.execute("INSERT INTO metas (descricao, valor_alvo, usuario) VALUES (?,?,?)", 
                             (ent_desc.text, val, App.get_running_app().usuario_atual))
-                con.commit()
-                con.close()
-                popup.dismiss()
-                self.show_metas()
+                con.commit(); con.close(); popup.dismiss(); self.show_metas()
             except: pass
-
-        btn.bind(on_press=salvar)
-        popup.open()
+        btn.bind(on_press=salvar); popup.open()
 
     def popup_nova_transacao(self, instance):
         user = App.get_running_app().usuario_atual
-        con = conectar()
-        cur = con.cursor()
+        con = conectar(); cur = con.cursor()
         cur.execute("SELECT nome FROM categorias WHERE tipo='despesa' AND usuario=?", (user,))
         cats_desp = [r[0] for r in cur.fetchall()]
         cur.execute("SELECT nome FROM categorias WHERE tipo='renda' AND usuario=?", (user,))
@@ -332,18 +342,20 @@ class MainScreen(Screen):
         ent_val = TextInput(hint_text="Valor (Ex: 150.50)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
         
         spin_cat = Spinner(text=cats_desp[0] if cats_desp else 'Outros', values=cats_desp, size_hint_y=None, height=dp(40))
-        ent_meses = TextInput(text="1", hint_text="Parcelas (meses)", input_filter='int', multiline=False, size_hint_y=None, height=dp(40))
-        ent_venc = TextInput(hint_text="Vencimento (DD/MM/AAAA)", multiline=False, size_hint_y=None, height=dp(40))
+        ent_meses = TextInput(text="1", hint_text="Parcelas", input_filter='int', multiline=False, size_hint_y=None, height=dp(40))
+        
+        # AQUI ESTÁ A MÁGICA: O Botão de Data nativo
+        btn_venc = BotaoData(size_hint_y=None, height=dp(40))
 
         def mudar_tipo(spinner, text):
             if text == 'Renda':
                 spinner_cat.values = cats_ren
                 spinner_cat.text = cats_ren[0] if cats_ren else 'Outros'
-                ent_venc.disabled = True
+                btn_venc.disabled = True
             else:
                 spinner_cat.values = cats_desp
                 spinner_cat.text = cats_desp[0] if cats_desp else 'Outros'
-                ent_venc.disabled = False
+                btn_venc.disabled = False
 
         spin_tipo.bind(text=mudar_tipo)
         spinner_cat = spin_cat
@@ -356,7 +368,8 @@ class MainScreen(Screen):
         content.add_widget(ent_val)
         content.add_widget(spinner_cat)
         content.add_widget(ent_meses)
-        content.add_widget(ent_venc)
+        content.add_widget(Label(text="Data de Vencimento:", size_hint_y=None, height=dp(20)))
+        content.add_widget(btn_venc)
         content.add_widget(btn_salvar)
 
         popup = Popup(title="Adicionar", content=content, size_hint=(0.95, 0.85))
@@ -367,7 +380,7 @@ class MainScreen(Screen):
             tipo = spin_tipo.text.lower()
             cat = spinner_cat.text
             meses = int(ent_meses.text) if ent_meses.text else 1
-            venc_br = ent_venc.text.strip()
+            venc_br = btn_venc.text
 
             if not desc or not v_txt:
                 return
@@ -379,10 +392,8 @@ class MainScreen(Screen):
                 if venc_br and tipo == 'despesa':
                     venc_ini = datetime.strptime(venc_br, "%d/%m/%Y")
 
-                con = conectar()
-                cur = con.cursor()
+                con = conectar(); cur = con.cursor()
 
-                # Lógica de Parcelamento
                 for i in range(meses):
                     mes_total = data_ini.month - 1 + i
                     ano_parcela = data_ini.year + mes_total // 12
@@ -390,7 +401,6 @@ class MainScreen(Screen):
                     
                     ultimo_dia = calendar.monthrange(ano_parcela, mes_parcela)[1]
                     dia_parcela = min(data_ini.day, ultimo_dia)
-                    
                     data_parcela = data_ini.replace(year=ano_parcela, month=mes_parcela, day=dia_parcela)
                     data_str = data_parcela.strftime("%Y-%m-%d")
                     
@@ -405,10 +415,7 @@ class MainScreen(Screen):
                     cur.execute("""INSERT INTO transacoes (descricao, valor, tipo, categoria, data, data_vencimento, usuario) 
                                    VALUES (?,?,?,?,?,?,?)""", (desc_final, valor, tipo, cat, data_str, venc_str, user))
                 
-                con.commit()
-                con.close()
-                popup.dismiss()
-                self.show_dashboard() 
+                con.commit(); con.close(); popup.dismiss(); self.show_dashboard() 
             except Exception as e:
                 print("Erro ao salvar:", e)
 
@@ -417,7 +424,6 @@ class MainScreen(Screen):
 
 class FinancasApp(App):
     usuario_atual = None
-
     def build(self):
         self.title = "Minhas Finanças Mobile"
         sm = ScreenManager()
