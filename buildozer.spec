@@ -11,6 +11,8 @@ fullscreen = 0
 android.api = 34
 android.minapi = 24
 android.ndk = 27
+# Força o uso do Gradle 8.7, que é compatível com Java 17
+android.gradle_version = 8.7
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.private_storage = True
