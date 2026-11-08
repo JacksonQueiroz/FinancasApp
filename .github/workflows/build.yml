@@ -47,17 +47,23 @@ jobs:
         run: |
           buildozer -v android debug
 
-      # O comando abaixo encontra a pasta do Gradle, entra nela e roda o build mostrando os erros
       - name: Run Gradle directly to see the real error
         run: |
-          GRADLE_DIR=$(find .buildozer -type d -name "minhasfinancas" | head -n 1)
-          if [ -z "$GRADLE_DIR" ]; then
-            echo "Pasta do Gradle não encontrada. O Buildozer falhou antes de gerar os arquivos."
+          # Procura o arquivo gradlew DENTRO da pasta dists (onde o projeto Android fica)
+          GRADLE_FILE=$(find .buildozer/android/platform/build-*/dists -name "gradlew" | head -n 1)
+          
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERRO: Arquivo gradlew não encontrado. O Buildozer falhou antes de criar o projeto Android."
             exit 1
           fi
+          
+          GRADLE_DIR=$(dirname "$GRADLE_FILE")
           echo "Entrando na pasta: $GRADLE_DIR"
           cd "$GRADLE_DIR"
+          
           chmod +x gradlew
+          
+          # Roda o Gradle mostrando todos os detalhes de um possível erro
           ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
