@@ -11,19 +11,12 @@ fullscreen = 0
 android.api = 34
 android.minapi = 24
 android.ndk = 27
-# Força o uso do Gradle 8.7, que é compatível com Java 17
-android.gradle_version = 8.7
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.private_storage = True
 android.permissions = INTERNET
-p4a.branch = develop
-
-# Força o uso do Java 17 e do Gradle mais recente
-android.gradle_dependencies = 
-android.java_home = /usr/lib/jvm/java-17-openjdk-amd64
 android.gradle_version = 8.7
-android.gradle_memory = 2048
+p4a.branch = develop
 
 [buildozer]
 log_level = 2
