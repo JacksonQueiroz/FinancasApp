@@ -46,7 +46,6 @@ jobs:
         continue-on-error: true
         run: |
           buildozer -v android debug
-
       - name: Run Gradle directly to see the real error
         run: |
           # Procura o arquivo gradlew DENTRO da pasta dists (onde o projeto Android fica)
@@ -63,7 +62,8 @@ jobs:
           
           chmod +x gradlew
           
-          # Roda o Gradle mostrando todos os detalhes de um possível erro
+          # Força o uso do Java 17 e roda o Gradle com stacktrace
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
