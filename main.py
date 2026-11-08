@@ -12,12 +12,13 @@ from kivy.utils import platform
 from kivy.metrics import dp
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.modalview import ModalView
+from kivy.graphics import Color, RoundedRectangle
 from datetime import datetime, timedelta
 import sqlite3
 import os
 import calendar
 
-Window.clearcolor = (0.1, 0.1, 0.1, 1)
+Window.clearcolor = (0.12, 0.12, 0.12, 1) # Cor de fundo mais suave
 
 if platform == 'android':
     from android.storage import app_storage_path
@@ -47,20 +48,36 @@ def init_db():
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# ============ COMPONENTES CUSTOMIZADOS ============
+# ============ COMPONENTES VISUAIS ============
 
 class CardDashboard(BoxLayout):
-    def __init__(self, titulo, valor, cor, **kwargs):
-        super().__init__(orientation='vertical', size_hint_y=None, height=dp(90), padding=dp(15), spacing=dp(5), **kwargs)
-        self.add_widget(Label(text=titulo, font_size='16sp', color=(0.8,0.8,0.8,1), size_hint_y=0.4))
-        self.add_widget(Label(text=valor, font_size='26sp', bold=True, color=cor, size_hint_y=0.6))
+    def __init__(self, titulo, valor, cor_fundo, cor_texto, **kwargs):
+        super().__init__(orientation='vertical', size_hint_y=None, height=dp(110), padding=dp(15), spacing=dp(5), **kwargs)
+        
+        # Desenha o fundo do cartão com bordas arredondadas
+        with self.canvas.before:
+            Color(*cor_fundo)
+            self.rect = RoundedRectangle(radius=[dp(10)], pos=self.pos, size=self.size)
+        self.bind(pos=self.atualizar_rect, size=self.atualizar_rect)
 
-# NOVO CALENDÁRIO NATIVO DO KIVY (Estável)
+        lbl_titulo = Label(text=titulo, font_size='14sp', color=(0.8, 0.8, 0.8, 1), size_hint_y=0.4, halign="left", valign="bottom")
+        lbl_titulo.bind(size=lbl_titulo.setter('text_size'))
+        
+        lbl_valor = Label(text=valor, font_size='24sp', bold=True, color=cor_texto, size_hint_y=0.6, halign="left", valign="top")
+        lbl_valor.bind(size=lbl_valor.setter('text_size'))
+
+        self.add_widget(lbl_titulo)
+        self.add_widget(lbl_valor)
+
+    def atualizar_rect(self, *args):
+        self.rect.pos = self.pos
+        self.rect.size = self.size
+
 class CalendarioPopup(ModalView):
     def __init__(self, botao_pai, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (0.9, 0.7)
-        self.background_color = (0, 0, 0, 0.7)
+        self.background_color = (0, 0, 0, 0.8)
         self.botao_pai = botao_pai
         self.ano_atual = datetime.now().year
         self.mes_atual = datetime.now().month
@@ -71,22 +88,19 @@ class CalendarioPopup(ModalView):
     def desenhar_calendario(self):
         self.layout.clear_widgets()
         
-        # Cabeçalho (Mês/Ano e Botões)
         topo = BoxLayout(size_hint_y=None, height=dp(50))
-        btn_ant = Button(text="<", size_hint_x=0.2, on_release=self.mes_anterior)
+        btn_ant = Button(text="<", size_hint_x=0.2, background_color=(0.3, 0.3, 0.3, 1), on_release=self.mes_anterior)
         lbl_mes = Label(text=f"{calendar.month_name[self.mes_atual].capitalize()} {self.ano_atual}", bold=True, font_size='20sp')
-        btn_prox = Button(text=">", size_hint_x=0.2, on_release=self.proximo_mes)
+        btn_prox = Button(text=">", size_hint_x=0.2, background_color=(0.3, 0.3, 0.3, 1), on_release=self.proximo_mes)
         topo.add_widget(btn_ant); topo.add_widget(lbl_mes); topo.add_widget(btn_prox)
         self.layout.add_widget(topo)
 
-        # Dias da Semana
         dias_semana = ["D", "S", "T", "Q", "Q", "S", "S"]
         grid_semana = GridLayout(cols=7, size_hint_y=None, height=dp(30))
         for d in dias_semana:
             grid_semana.add_widget(Label(text=d, bold=True, color=(0.7,0.7,0.7,1)))
         self.layout.add_widget(grid_semana)
 
-        # Dias do Mês
         grid_dias = GridLayout(cols=7)
         cal = calendar.monthcalendar(self.ano_atual, self.mes_atual)
         
@@ -95,12 +109,11 @@ class CalendarioPopup(ModalView):
                 if dia == 0:
                     grid_dias.add_widget(Label(text=""))
                 else:
-                    btn = Button(text=str(dia), background_color=(0.2, 0.4, 0.7, 1))
+                    btn = Button(text=str(dia), background_color=(0.2, 0.5, 0.8, 1))
                     btn.bind(on_release=lambda x, d=dia: self.selecionar_dia(d))
                     grid_dias.add_widget(btn)
         self.layout.add_widget(grid_dias)
 
-        # Botão Fechar
         self.layout.add_widget(Button(text="Cancelar", size_hint_y=None, height=dp(45), background_color=(0.8, 0.3, 0.3, 1), on_release=self.dismiss))
 
     def mes_anterior(self, instance):
@@ -125,7 +138,7 @@ class BotaoData(Button):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.text = datetime.now().strftime("%d/%m/%Y")
-        self.background_color = (0.2, 0.4, 0.7, 1)
+        self.background_color = (0.2, 0.5, 0.8, 1)
         self.bind(on_release=self.abrir_calendario)
 
     def abrir_calendario(self, instance):
@@ -137,14 +150,14 @@ class LoginScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         layout = BoxLayout(orientation='vertical', padding=dp(30), spacing=dp(20))
-        layout.add_widget(Label(text="💰 Finanças Mobile", font_size='28sp', bold=True, size_hint_y=0.3))
+        layout.add_widget(Label(text="Finanças Mobile", font_size='32sp', bold=True, size_hint_y=0.3))
         layout.add_widget(Label(text="Quem está acessando?", font_size='18sp', size_hint_y=0.1))
 
-        btn_jackson = Button(text="👤 Jackson", font_size='20sp', background_color=(0.2, 0.6, 0.8, 1))
+        btn_jackson = Button(text="Jackson", font_size='20sp', background_color=(0.2, 0.6, 0.8, 1), size_hint_y=None, height=dp(60))
         btn_jackson.bind(on_press=lambda x: self.login("Jackson"))
         layout.add_widget(btn_jackson)
 
-        btn_elcione = Button(text="👤 Elcione", font_size='20sp', background_color=(0.8, 0.4, 0.6, 1))
+        btn_elcione = Button(text="Elcione", font_size='20sp', background_color=(0.8, 0.4, 0.6, 1), size_hint_y=None, height=dp(60))
         btn_elcione.bind(on_press=lambda x: self.login("Elcione"))
         layout.add_widget(btn_elcione)
         self.add_widget(layout)
@@ -161,15 +174,20 @@ class MainScreen(Screen):
         self.content_area = BoxLayout(orientation='vertical', padding=dp(10))
         self.layout.add_widget(self.content_area)
 
-        nav = BoxLayout(size_hint_y=0.1, spacing=dp(5))
-        btn_dash = Button(text="📊 Início", background_color=(0.3, 0.3, 0.3, 1))
+        # Menu Inferior
+        nav = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(2))
+        
+        btn_dash = Button(text="Início", background_color=(0.25, 0.25, 0.25, 1))
         btn_dash.bind(on_press=self.show_dashboard)
-        btn_trans = Button(text="📋 Contas", background_color=(0.3, 0.3, 0.3, 1))
+        
+        btn_trans = Button(text="Contas", background_color=(0.25, 0.25, 0.25, 1))
         btn_trans.bind(on_press=self.show_transacoes)
-        btn_metas = Button(text="🎯 Metas", background_color=(0.3, 0.3, 0.3, 1))
-        btn_metas.bind(on_press=self.show_metas)
-        btn_add = Button(text="➕", background_color=(0.1, 0.6, 0.4, 1), font_size='20sp')
+        
+        btn_add = Button(text="+ Novo", background_color=(0.1, 0.7, 0.4, 1), bold=True)
         btn_add.bind(on_press=self.popup_nova_transacao)
+        
+        btn_metas = Button(text="Metas", background_color=(0.25, 0.25, 0.25, 1))
+        btn_metas.bind(on_press=self.show_metas)
 
         nav.add_widget(btn_dash)
         nav.add_widget(btn_trans)
@@ -209,19 +227,31 @@ class MainScreen(Screen):
 
         saldo = renda - despesa
 
-        dash = BoxLayout(orientation='vertical', spacing=dp(10))
-        dash.add_widget(Label(text=f"Olá, {user}!", font_size='22sp', bold=True, size_hint_y=0.1))
+        # Rolagem para a tela não quebrar
+        scroll = ScrollView()
+        dash = BoxLayout(orientation='vertical', spacing=dp(15), size_hint_y=None, padding=dp(5))
+        dash.bind(minimum_height=dash.setter('height'))
+        
+        # Cabeçalho
+        header = Label(text=f"Olá, {user}!", font_size='24sp', bold=True, size_hint_y=None, height=dp(50), halign="left", valign="middle")
+        header.bind(size=header.setter('text_size'))
+        dash.add_widget(header)
 
+        # Aviso de Vencimento
         if vencendo > 0:
-            btn_aviso = Button(text=f"⚠️ {vencendo} contas vencendo em breve!", background_color=(0.8, 0.3, 0.3, 1), size_hint_y=0.1)
+            btn_aviso = Button(text=f"Atenção: {vencendo} conta(s) vencendo em breve!", 
+                               background_color=(0.9, 0.3, 0.3, 1), 
+                               size_hint_y=None, height=dp(45), bold=True)
             btn_aviso.bind(on_press=self.show_transacoes)
             dash.add_widget(btn_aviso)
 
-        dash.add_widget(CardDashboard("💵 Renda do Mês", formatar_moeda(renda), (0.1, 0.6, 0.3, 1)))
-        dash.add_widget(CardDashboard("💸 Despesas do Mês", formatar_moeda(despesa), (0.8, 0.3, 0.3, 1)))
-        dash.add_widget(CardDashboard("📈 Saldo do Mês", formatar_moeda(saldo), (0.2, 0.4, 0.8, 1)))
+        # Cards com cores de fundo mais suaves
+        dash.add_widget(CardDashboard("Renda do Mês", formatar_moeda(renda), (0.1, 0.4, 0.2, 1), (0.3, 1, 0.5, 1)))
+        dash.add_widget(CardDashboard("Despesas do Mês", formatar_moeda(despesa), (0.4, 0.1, 0.1, 1), (1, 0.4, 0.4, 1)))
+        dash.add_widget(CardDashboard("Saldo do Mês", formatar_moeda(saldo), (0.1, 0.2, 0.4, 1), (0.4, 0.7, 1, 1)))
         
-        self.content_area.add_widget(dash)
+        scroll.add_widget(dash)
+        self.content_area.add_widget(scroll)
 
     def show_transacoes(self, instance=None):
         self.content_area.clear_widgets()
@@ -239,35 +269,49 @@ class MainScreen(Screen):
         con.close()
 
         scroll = ScrollView()
-        lista = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(5))
+        lista = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(8), padding=dp(5))
         lista.bind(minimum_height=lista.setter('height'))
 
         if not rows:
-            lista.add_widget(Label(text="Nenhuma conta este mês.", size_hint_y=None, height=dp(50)))
+            lista.add_widget(Label(text="Nenhuma conta para este mês.", size_hint_y=None, height=dp(50), color=(0.7,0.7,0.7,1)))
 
         for tid, desc, valor, tipo, data, venc, pago in rows:
-            linha = BoxLayout(size_hint_y=None, height=dp(70), spacing=dp(10))
-            cor = (0.2, 0.8, 0.4, 1) if tipo == 'renda' else (0.9, 0.3, 0.3, 1)
-            if pago: cor = (0.5, 0.5, 0.5, 1)
+            card = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(70), spacing=dp(10), padding=dp(10))
+            
+            # Fundo do cartão da lista
+            with card.canvas.before:
+                Color(0.2, 0.2, 0.2, 1) if not pago else Color(0.15, 0.15, 0.15, 1)
+                card_rect = RoundedRectangle(radius=[dp(8)], pos=card.pos, size=card.size)
+            card.bind(pos=lambda obj, val, r=card_rect: setattr(r, 'pos', val), 
+                      size=lambda obj, val, r=card_rect: setattr(r, 'size', val))
+
+            cor_txt = (0.3, 1, 0.5, 1) if tipo == 'renda' else (1, 0.4, 0.4, 1)
+            if pago: cor_txt = (0.5, 0.5, 0.5, 1)
 
             info = BoxLayout(orientation='vertical')
-            info.add_widget(Label(text=desc, halign="left", valign="middle", color=cor, bold=True))
+            lbl_d = Label(text=desc, halign="left", valign="middle", color=cor_txt, bold=True, font_size='16sp')
+            lbl_d.bind(size=lbl_d.setter('text_size'))
+            
             texto_data = f"Venc: {venc[8:10]}/{venc[5:7]}" if venc else f"Data: {data[8:10]}/{data[5:7]}"
             if pago: texto_data += " (PAGO)"
-            info.add_widget(Label(text=texto_data, halign="left", valign="middle", font_size='12sp', color=(0.7,0.7,0.7,1)))
+            lbl_data = Label(text=texto_data, halign="left", valign="middle", font_size='12sp', color=(0.6,0.6,0.6,1))
+            lbl_data.bind(size=lbl_data.setter('text_size'))
             
-            lbl_val = Label(text=formatar_moeda(valor), color=cor, bold=True, size_hint_x=0.4, halign="right")
+            info.add_widget(lbl_d)
+            info.add_widget(lbl_data)
+
+            lbl_val = Label(text=formatar_moeda(valor), color=cor_txt, bold=True, size_hint_x=0.4, halign="right", valign="middle", font_size='16sp')
             lbl_val.bind(size=lbl_val.setter('text_size'))
 
-            linha.add_widget(info)
-            linha.add_widget(lbl_val)
+            card.add_widget(info)
+            card.add_widget(lbl_val)
 
             if not pago and tipo == 'despesa':
-                btn_pagar = Button(text="Pagar", size_hint_x=0.2, background_color=(0.1, 0.6, 0.3, 1))
+                btn_pagar = Button(text="Pagar", size_hint_x=None, width=dp(70), background_color=(0.1, 0.6, 0.3, 1), bold=True)
                 btn_pagar.bind(on_press=lambda x, i=tid: self.marcar_pago(i))
-                linha.add_widget(btn_pagar)
+                card.add_widget(btn_pagar)
 
-            lista.add_widget(linha)
+            lista.add_widget(card)
 
         scroll.add_widget(lista)
         self.content_area.add_widget(scroll)
@@ -289,19 +333,27 @@ class MainScreen(Screen):
         lista = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(10), padding=dp(10))
         lista.bind(minimum_height=lista.setter('height'))
 
-        btn_nova = Button(text="➕ Nova Meta", size_hint_y=None, height=dp(50), background_color=(0.2, 0.4, 0.8, 1))
+        btn_nova = Button(text="Cadastrar Nova Meta", size_hint_y=None, height=dp(50), background_color=(0.2, 0.5, 0.8, 1), bold=True)
         btn_nova.bind(on_press=self.popup_nova_meta)
         lista.add_widget(btn_nova)
 
         for mid, desc, alvo, atual in metas:
             prog = min(atual / alvo, 1.0) if alvo > 0 else 0
-            cor = (0.1, 0.6, 0.3, 1) if prog >= 1.0 else (0.2, 0.5, 0.8, 1)
-            card = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), padding=dp(10))
-            card.add_widget(Label(text=desc, bold=True, font_size='18sp'))
-            card.add_widget(Label(text=f"{formatar_moeda(atual)} de {formatar_moeda(alvo)} ({prog*100:.0f}%)"))
-            btn_guardar = Button(text="💰 Guardar", background_color=cor, size_hint_y=None, height=dp(35))
+            
+            card = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(100), padding=dp(10), spacing=dp(5))
+            with card.canvas.before:
+                Color(0.2, 0.2, 0.2, 1)
+                card_rect = RoundedRectangle(radius=[dp(8)], pos=card.pos, size=card.size)
+            card.bind(pos=lambda obj, val, r=card_rect: setattr(r, 'pos', val), 
+                      size=lambda obj, val, r=card_rect: setattr(r, 'size', val))
+
+            card.add_widget(Label(text=desc, bold=True, font_size='18sp', size_hint_y=0.4))
+            card.add_widget(Label(text=f"{formatar_moeda(atual)} de {formatar_moeda(alvo)} ({prog*100:.0f}%)", size_hint_y=0.3))
+            
+            btn_guardar = Button(text="Guardar Dinheiro", background_color=(0.1, 0.6, 0.3, 1), size_hint_y=0.4)
             btn_guardar.bind(on_press=lambda x, i=mid, a=atual: self.popup_guardar_meta(i, a))
             card.add_widget(btn_guardar)
+            
             lista.add_widget(card)
         scroll.add_widget(lista)
         self.content_area.add_widget(scroll)
@@ -309,7 +361,7 @@ class MainScreen(Screen):
     def popup_guardar_meta(self, mid, atual):
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         ent = TextInput(hint_text="Valor (R$)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
-        btn = Button(text="Salvar", size_hint_y=None, height=dp(40), background_color=(0.1, 0.6, 0.3, 1))
+        btn = Button(text="Salvar", size_hint_y=None, height=dp(45), background_color=(0.1, 0.6, 0.3, 1))
         content.add_widget(ent); content.add_widget(btn)
         popup = Popup(title="Guardar Dinheiro", content=content, size_hint=(0.8, 0.4))
 
@@ -325,7 +377,7 @@ class MainScreen(Screen):
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         ent_desc = TextInput(hint_text="Ex: Viagem", multiline=False, size_hint_y=None, height=dp(40))
         ent_val = TextInput(hint_text="Valor Alvo (R$)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
-        btn = Button(text="Criar Meta", size_hint_y=None, height=dp(40), background_color=(0.1, 0.6, 0.3, 1))
+        btn = Button(text="Criar Meta", size_hint_y=None, height=dp(45), background_color=(0.1, 0.6, 0.3, 1))
         content.add_widget(ent_desc); content.add_widget(ent_val); content.add_widget(btn)
         popup = Popup(title="Nova Meta", content=content, size_hint=(0.9, 0.5))
 
@@ -349,14 +401,14 @@ class MainScreen(Screen):
 
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         
-        spin_tipo = Spinner(text='Despesa', values=('Despesa', 'Renda'), size_hint_y=None, height=dp(40), background_color=(0.2, 0.4, 0.7, 1))
+        spin_tipo = Spinner(text='Despesa', values=('Despesa', 'Renda'), size_hint_y=None, height=dp(45), background_color=(0.3, 0.3, 0.3, 1))
         ent_desc = TextInput(hint_text="Descrição (Ex: Mercado)", multiline=False, size_hint_y=None, height=dp(40))
         ent_val = TextInput(hint_text="Valor (Ex: 150.50)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
         
-        spin_cat = Spinner(text=cats_desp[0] if cats_desp else 'Outros', values=cats_desp, size_hint_y=None, height=dp(40))
+        spin_cat = Spinner(text=cats_desp[0] if cats_desp else 'Outros', values=cats_desp, size_hint_y=None, height=dp(45), background_color=(0.3, 0.3, 0.3, 1))
         ent_meses = TextInput(text="1", hint_text="Parcelas", input_filter='int', multiline=False, size_hint_y=None, height=dp(40))
         
-        btn_venc = BotaoData(size_hint_y=None, height=dp(40))
+        btn_venc = BotaoData(size_hint_y=None, height=dp(45))
 
         def mudar_tipo(spinner, text):
             if text == 'Renda':
@@ -371,19 +423,19 @@ class MainScreen(Screen):
         spin_tipo.bind(text=mudar_tipo)
         spinner_cat = spin_cat
 
-        btn_salvar = Button(text="Salvar", size_hint_y=None, height=dp(50), background_color=(0.1, 0.6, 0.3, 1))
+        btn_salvar = Button(text="SALVAR", size_hint_y=None, height=dp(50), background_color=(0.1, 0.6, 0.3, 1), bold=True)
 
-        content.add_widget(Label(text="Nova Transação", bold=True))
+        content.add_widget(Label(text="Nova Transação", bold=True, size_hint_y=None, height=dp(30), font_size='18sp'))
         content.add_widget(spin_tipo)
         content.add_widget(ent_desc)
         content.add_widget(ent_val)
         content.add_widget(spinner_cat)
         content.add_widget(ent_meses)
-        content.add_widget(Label(text="Data de Vencimento:", size_hint_y=None, height=dp(20)))
+        content.add_widget(Label(text="Data de Vencimento:", size_hint_y=None, height=dp(20), halign="left"))
         content.add_widget(btn_venc)
         content.add_widget(btn_salvar)
 
-        popup = Popup(title="Adicionar", content=content, size_hint=(0.95, 0.85))
+        popup = Popup(title="Adicionar", content=content, size_hint=(0.95, 0.9))
 
         def salvar(instance):
             desc = ent_desc.text.strip()
