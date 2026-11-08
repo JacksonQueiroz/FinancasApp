@@ -5,7 +5,6 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.core.window import Window
@@ -14,7 +13,7 @@ from kivy.metrics import dp
 from datetime import datetime, timedelta
 import sqlite3
 import os
-import calendar # <-- NOVO IMPORT AQUI
+import calendar
 
 # Configura a cor de fundo
 Window.clearcolor = (0.1, 0.1, 0.1, 1)
@@ -143,9 +142,10 @@ class MainScreen(Screen):
         cur = con.cursor()
         mes_atual = datetime.now().strftime("%Y-%m")
         
-        cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='renda' AND usuario=? AND data LIKE ?", ('renda', user, f"{mes_atual}%"))
+        # CORREÇÃO DO BUG DO SQL AQUI:
+        cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='renda' AND usuario=? AND data LIKE ?", (user, f"{mes_atual}%"))
         renda = cur.fetchone()[0]
-        cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='despesa' AND usuario=? AND data LIKE ?", ('despesa', user, f"{mes_atual}%"))
+        cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='despesa' AND usuario=? AND data LIKE ?", (user, f"{mes_atual}%"))
         despesa = cur.fetchone()[0]
         
         hoje = datetime.now().date()
@@ -382,7 +382,7 @@ class MainScreen(Screen):
                 con = conectar()
                 cur = con.cursor()
 
-                # --- LÓGICA DE PARCELAMENTO COM CALENDAR (Sem dateutil) ---
+                # Lógica de Parcelamento
                 for i in range(meses):
                     mes_total = data_ini.month - 1 + i
                     ano_parcela = data_ini.year + mes_total // 12
