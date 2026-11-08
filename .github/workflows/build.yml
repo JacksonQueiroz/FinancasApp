@@ -42,29 +42,9 @@ jobs:
           pip install git+https://github.com/kivy/buildozer.git
           pip install cython virtualenv
 
-      - name: Buildozer (Gera os arquivos fonte)
-        continue-on-error: true
+      - name: Build APK
         run: |
           buildozer -v android debug
-      - name: Run Gradle directly to see the real error
-        run: |
-          # Procura o arquivo gradlew DENTRO da pasta dists (onde o projeto Android fica)
-          GRADLE_FILE=$(find .buildozer/android/platform/build-*/dists -name "gradlew" | head -n 1)
-          
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ERRO: Arquivo gradlew não encontrado. O Buildozer falhou antes de criar o projeto Android."
-            exit 1
-          fi
-          
-          GRADLE_DIR=$(dirname "$GRADLE_FILE")
-          echo "Entrando na pasta: $GRADLE_DIR"
-          cd "$GRADLE_DIR"
-          
-          chmod +x gradlew
-          
-          # Força o uso do Java 17 e roda o Gradle com stacktrace
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
