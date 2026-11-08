@@ -11,12 +11,12 @@ from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.metrics import dp
 from datetime import datetime, timedelta
-from kivy.uix.gridlayout import GridLayout
 import sqlite3
 import os
 import calendar
 
-# Se estiver no Android, importa o calendário nativo
+Window.clearcolor = (0.1, 0.1, 0.1, 1)
+
 if platform == 'android':
     from android.permissions import request_permissions, Permission
     request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
@@ -24,8 +24,6 @@ if platform == 'android':
     DB_PATH = os.path.join(app_storage_path(), "financas_android.db")
 else:
     DB_PATH = "financas_android.db"
-
-Window.clearcolor = (0.1, 0.1, 0.1, 1)
 
 def conectar():
     return sqlite3.connect(DB_PATH)
@@ -97,16 +95,12 @@ class BotaoData(Button):
 
     def abrir_calendario(self, instance):
         if platform == 'android':
-            # Abre o calendário nativo do Android
-            from android import activity
             from jnius import autoclass
             from android.runnable import run_on_ui_thread
             
-            # Implementação simplificada usando o DatePickerDialog do Android
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             DatePickerDialog = autoclass('android.app.DatePickerDialog')
             Calendar = autoclass('java.util.Calendar')
-            Context = autoclass('android.content.Context')
             
             activity = PythonActivity.mActivity
             calendar = Calendar.getInstance()
@@ -178,10 +172,17 @@ class MainScreen(Screen):
         cur = con.cursor()
         mes_atual = datetime.now().strftime("%Y-%m")
         
-        # Consultas corrigidas
-        cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='renda' AND usuario=? AND data LIKE ?", (user, f"{mes_atual}%"))
+        # CORREÇÃO: Filtro do mês atual usando a data de vencimento como prioridade
+        query_renda = """SELECT COALESCE(SUM(valor),0) FROM transacoes 
+                         WHERE tipo='renda' AND usuario=? 
+                         AND (CASE WHEN data_vencimento IS NOT NULL AND data_vencimento != '' THEN data_vencimento ELSE data END) LIKE ?"""
+        cur.execute(query_renda, (user, f"{mes_atual}%"))
         renda = cur.fetchone()[0]
-        cur.execute("SELECT COALESCE(SUM(valor),0) FROM transacoes WHERE tipo='despesa' AND usuario=? AND data LIKE ?", (user, f"{mes_atual}%"))
+        
+        query_despesa = """SELECT COALESCE(SUM(valor),0) FROM transacoes 
+                           WHERE tipo='despesa' AND usuario=? 
+                           AND (CASE WHEN data_vencimento IS NOT NULL AND data_vencimento != '' THEN data_vencimento ELSE data END) LIKE ?"""
+        cur.execute(query_despesa, (user, f"{mes_atual}%"))
         despesa = cur.fetchone()[0]
         
         hoje = datetime.now().date()
@@ -201,7 +202,6 @@ class MainScreen(Screen):
             btn_aviso.bind(on_press=self.show_transacoes)
             dash.add_widget(btn_aviso)
 
-        # Cards do Dashboard
         dash.add_widget(CardDashboard("💵 Renda do Mês", formatar_moeda(renda), (0.1, 0.6, 0.3, 1)))
         dash.add_widget(CardDashboard("💸 Despesas do Mês", formatar_moeda(despesa), (0.8, 0.3, 0.3, 1)))
         dash.add_widget(CardDashboard("📈 Saldo do Mês", formatar_moeda(saldo), (0.2, 0.4, 0.8, 1)))
@@ -215,9 +215,13 @@ class MainScreen(Screen):
         con = conectar()
         cur = con.cursor()
         mes_atual = datetime.now().strftime("%Y-%m")
-        cur.execute("""SELECT id, descricao, valor, tipo, data, data_vencimento, pago 
-                       FROM transacoes WHERE usuario=? AND data LIKE ? 
-                       ORDER BY pago ASC, data DESC""", (user, f"{mes_atual}%"))
+        
+        # CORREÇÃO: Filtro de contas do mês usando vencimento
+        query = """SELECT id, descricao, valor, tipo, data, data_vencimento, pago 
+                   FROM transacoes WHERE usuario=? 
+                   AND (CASE WHEN data_vencimento IS NOT NULL AND data_vencimento != '' THEN data_vencimento ELSE data END) LIKE ? 
+                   ORDER BY pago ASC, data DESC"""
+        cur.execute(query, (user, f"{mes_atual}%"))
         rows = cur.fetchall()
         con.close()
 
@@ -264,7 +268,6 @@ class MainScreen(Screen):
         self.show_transacoes()
 
     def show_metas(self, instance=None):
-        # (Mantido igual à versão anterior)
         self.content_area.clear_widgets()
         user = App.get_running_app().usuario_atual
         con = conectar(); cur = con.cursor()
@@ -293,7 +296,6 @@ class MainScreen(Screen):
         self.content_area.add_widget(scroll)
 
     def popup_guardar_meta(self, mid, atual):
-        # (Mantido igual)
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         ent = TextInput(hint_text="Valor (R$)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
         btn = Button(text="Salvar", size_hint_y=None, height=dp(40), background_color=(0.1, 0.6, 0.3, 1))
@@ -309,7 +311,6 @@ class MainScreen(Screen):
         btn.bind(on_press=salvar); popup.open()
 
     def popup_nova_meta(self, instance):
-        # (Mantido igual)
         content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         ent_desc = TextInput(hint_text="Ex: Viagem", multiline=False, size_hint_y=None, height=dp(40))
         ent_val = TextInput(hint_text="Valor Alvo (R$)", input_filter='float', multiline=False, size_hint_y=None, height=dp(40))
@@ -344,7 +345,6 @@ class MainScreen(Screen):
         spin_cat = Spinner(text=cats_desp[0] if cats_desp else 'Outros', values=cats_desp, size_hint_y=None, height=dp(40))
         ent_meses = TextInput(text="1", hint_text="Parcelas", input_filter='int', multiline=False, size_hint_y=None, height=dp(40))
         
-        # AQUI ESTÁ A MÁGICA: O Botão de Data nativo
         btn_venc = BotaoData(size_hint_y=None, height=dp(40))
 
         def mudar_tipo(spinner, text):
@@ -410,7 +410,11 @@ class MainScreen(Screen):
                         venc_parcela = venc_ini.replace(year=ano_parcela, month=mes_parcela, day=min(venc_ini.day, ultimo_dia_venc))
                         venc_str = venc_parcela.strftime("%Y-%m-%d")
 
-                    desc_final = f"{desc} ({i+1}/{meses})" if meses > 1 else desc
+                    # Se for Fixa, avança os meses
+                    if meses > 1:
+                        desc_final = f"{desc} ({i+1}/{meses})"
+                    else:
+                        desc_final = desc
 
                     cur.execute("""INSERT INTO transacoes (descricao, valor, tipo, categoria, data, data_vencimento, usuario) 
                                    VALUES (?,?,?,?,?,?,?)""", (desc_final, valor, tipo, cat, data_str, venc_str, user))
