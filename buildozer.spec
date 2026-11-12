@@ -5,7 +5,7 @@ package.domain = org.minhasfinancas
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
-requirements = python3,kivy==2.3.0,kivymd==1.2.0
+requirements = python3==3.11.1, hostpython3==3.11.1, kivy==2.3.0, kivymd==1.2.0
 orientation = portrait
 fullscreen = 0
 android.api = 34
